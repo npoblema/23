@@ -1,83 +1,148 @@
 # Habit Tracker
 
-Habit Tracker — это REST API для управления привычками с интеграцией уведомлений через Telegram. Проект разработан для отслеживания привычек пользователей, предоставления публичного списка привычек и отправки напоминаний.
+Habit Tracker — это REST API для управления привычками с интеграцией уведомлений через Telegram. Проект предназначен для отслеживания привычек, предоставления публичного списка и отправки напоминаний пользователям.
 
-## Описание
+## Описание проекта
 
-Habit Tracker позволяет пользователям:
-- Создавать, редактировать и удалять свои привычки.
-- Просматривать список публичных привычек.
-- Получать напоминания о привычках через Telegram.
+Habit Tracker предоставляет следующий функционал:
+- Создание, редактирование и удаление привычек.
+- Просмотр публичных привычек других пользователей.
+- Отправка напоминаний через Telegram с помощью асинхронных задач.
 
-Проект построен на основе Django и Django REST Framework, использует PostgreSQL для хранения данных, Celery и Redis для асинхронной обработки задач, а также Telegram Bot API для уведомлений. API документировано с помощью Swagger (`drf-yasg`), а код протестирован с покрытием 97%.
+Проект реализован с использованием:
+- **Django** и **Django REST Framework** для API.
+- **PostgreSQL** для хранения данных.
+- **Celery** и **Redis** для асинхронной обработки задач.
+- **Telegram Bot API** для уведомлений.
+- **Swagger (drf-yasg)** для документации API.
+
+Код протестирован с покрытием **97%**.
+
+---
 
 ## Требования
 
-- Python 3.12
-- PostgreSQL 13+
-- Redis 5+
+- **Python**: 3.12
+- **PostgreSQL**: 13 или выше
+- **Redis**: 5 или выше
+- **Docker** (опционально, для запуска Redis)
+- Telegram Bot Token (получить у [@BotFather](https://t.me/BotFather))
 
+---
 
+## Установка
 
-1. Настройка виртуального окружения
+### 1. Клонирование репозитория
 ```bash
-    python -m venv .venv
-    .venv\Scripts\activate  # Windows
-    # source .venv/bin/activate  # Linux/Mac
-   ```
-2. Установка зависимостей 
+git clone <repository_url>
+cd Course_work_Habit_Tracker
+```
+
+### 2. Настройка виртуального окружения
+```bash
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+```
+
+### 3. Установка зависимостей
 ```bash
 pip install -r requirements.txt
 ```
-3. Настройка окружения
 
-Создайте файл .env в корне проекта:
+### 4. Настройка окружения
+Создайте файл `.env` в корне проекта и добавьте:
 ```bash
 DATABASE_URL=postgres://postgres:your_password@localhost:5432/habit_tracker
 SECRET_KEY=your_django_secret_key
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-````
-4. Применение миграций
+```
+- Замените `your_password`, `your_django_secret_key` и `your_telegram_bot_token` на свои значения.
+
+### 5. Применение миграций
 ```bash
 python habit_tracker/manage.py migrate
 ```
-5. Запуск Redis
+
+### 6. Запуск Redis
 ```bash
 docker run -d -p 6379:6379 redis
 ```
-6. Запуск сервера
+
+### 7. Запуск сервера
 ```bash
 python habit_tracker/manage.py runserver
 ```
-7. Запуск Celery
+
+### 8. Запуск Celery
+
+
 ```bash
 celery -A habit_tracker worker -l info
 ```
 
-# Использование
-### API
-* Базовый URL: http://127.0.0.1:8000/api/
-* Эндпоинты:
-    * GET /api/habits/ — список привычек текущего пользователя (требуется аутентификация).
-    * POST /api/habits/ — создание привычки.
-    * GET /api/habits/public/ — список публичных привычек.
-    * PATCH /api/habits/<id>/ — обновление привычки.
-    * DELETE /api/habits/<id>/ — удаление привычки.
-### Документация API
-* Swagger: http://127.0.0.1:8000/swagger/
+---
 
-# Тестирование
+## Использование
+
+### Для пользователей
+1. Зарегистрируйтесь через API: `POST /api/users/register/`.
+2. Войдите в систему: `POST /api/users/login/`.
+3. Используйте токен в заголовке `Authorization: Token <token>` для доступа к защищённым эндпоинтам.
+4. Создавайте привычки и получайте напоминания в Telegram.
+
+### API
+- **Базовый URL**: `http://127.0.0.1:8000/api/`
+- **Эндпоинты**:
+  - `POST /api/users/register/` — регистрация пользователя.
+  - `POST /api/users/login/` — авторизация и получение токена.
+  - `GET /api/habits/` — список привычек текущего пользователя (требуется токен).
+  - `POST /api/habits/` — создание привычки (требуется токен).
+  - `GET /api/habits/public/` — список публичных привычек.
+  - `PATCH /api/habits/<id>/` — обновление привычки (требуется токен).
+  - `DELETE /api/habits/<id>/` — удаление привычки (требуется токен).
+
+### Документация API
+- **Swagger**: `http://127.0.0.1:8000/swagger/`
+
+---
+
+## Тестирование
+
+Запустите тесты из директории `habit_tracker`:
+
+
 ```bash
 cd habit_tracker
 pytest -v --cov=habits --cov-report=html
 ```
-* Покрытие кода: 97% (см. htmlcov/index.html).
+- **Покрытие кода**: 97% (см. `htmlcov/index.html`).
 
-# Структура проекта
-* habit_tracker/: Основной каталог проекта.
-* habits/: Приложение с моделями, сериализаторами, вьюхами и тестами.
-* requirements.txt: Зависимости.
-* pytest.ini: Настройки тестов.
+Для тестирования приложения `users`:
+```bash
+pytest -v --cov=users --cov-report=html
+```
+
+
+---
+
+## Структура проекта
+
+- **`habit_tracker/`**: Основной каталог проекта.
+- **`habits/`**: Приложение для работы с привычками (модели, сериализаторы, вьюхи, тесты).
+- **`users/`**: Приложение для управления пользователями (регистрация, авторизация).
+- **`requirements.txt`**: Список зависимостей.
+- **`pytest.ini`**: Конфигурация тестов.
+
+---
+
+## Разработчикам
+
+- Проект использует **Token Authentication** (DRF). Токен передаётся в заголовке: `Authorization: Token <token>`.
+- Для настройки Telegram-бота замените `TELEGRAM_BOT_TOKEN` в `.env` на свой токен.
+- Добавление новых эндпоинтов возможно через `habits/urls.py` или `users/urls.py`.
+
+---
 
 ## Автор
-* Владимиров Александр
+
+- **Владимиров Александр**
