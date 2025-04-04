@@ -1,26 +1,23 @@
 import pytest
-from django.contrib.auth.models import User
+from django.urls import reverse
+from rest_framework import status
 from rest_framework.test import APIClient
-from .models import Habit
-from .serializers import HabitSerializer
-from datetime import time
-from habits.tasks import send_telegram_reminder
+from django.contrib.auth import get_user_model
+from habits.models import Habit
+from habits.serializers import HabitSerializer
 
-@pytest.fixture
-def api_client():
-    return APIClient()
+User = get_user_model()
 
 @pytest.fixture
 def user():
-    return User.objects.create_user(username='testuser', password='testpass')
+    return User.objects.create_user(username='testuser', email='test@example.com', password='testpass')
 
 @pytest.fixture
-def habit(user, mocker):
-    mocker.patch('habits.tasks.send_telegram_reminder.apply_async')  # Мокаем задачу
+def habit(user):
     return Habit.objects.create(
         user=user,
         place="дома",
-        time=time(8, 0),
+        time="08:00:00",
         action="сделать зарядку",
         is_pleasant=False,
         periodicity=1,
@@ -28,85 +25,174 @@ def habit(user, mocker):
         is_public=True
     )
 
-# Тесты модели
-@pytest.mark.django_db
-def test_habit_model_validation_duration(user):
-    habit = Habit(user=user, place="дома", time=time(8, 0), action="тест", duration=150)
-    with pytest.raises(Exception) as excinfo:
-        habit.full_clean()
-    assert "Время выполнения не должно превышать 120 секунд" in str(excinfo.value)
+@pytest.fixture
+def api_client():
+    return APIClient()
 
 @pytest.mark.django_db
-def test_habit_model_validation_reward_and_related_habit(user):
-    pleasant_habit = Habit.objects.create(user=user, place="парк", time=time(9, 0), action="гулять", is_pleasant=True)
-    habit = Habit(user=user, place="дома", time=time(8, 0), action="тест", reward="конфета", related_habit=pleasant_habit)
+def test_habit_model_validation_duration():
+    user = User.objects.create_user(username='testuser2', email='test2@example.com', password='testpass')
+    habit = Habit(
+        user=user,
+        place="дома",
+        time="08:00:00",
+        action="сделать зарядку",
+        is_pleasant=False,
+        periodicity=1,
+        duration=121,  # больше 120 секунд
+        is_public=True
+    )
     with pytest.raises(Exception) as excinfo:
         habit.full_clean()
-    assert "Нельзя указать одновременно вознаграждение и связанную привычку" in str(excinfo.value)
+    assert "Duration must be less than or equal to 120 seconds" in str(excinfo.value)
 
-# Тесты сериализатора
+@pytest.mark.django_db
+def test_habit_model_validation_reward_and_related_habit():
+    user = User.objects.create_user(username='testuser3', email='test3@example.com', password='testpass')
+    habit = Habit(
+        user=user,
+        place="дома",
+        time="08:00:00",
+        action="сделать зарядку",
+        is_pleasant=False,
+        periodicity=1,
+        duration=60,
+        is_public=True,
+        reward="награда",
+        related_habit=Habit.objects.create(
+            user=user,
+            place="дома",
+            time="09:00:00",
+            action="полезная привычка",
+            is_pleasant=True,
+            periodicity=1,
+            duration=60,
+            is_public=True
+        )
+    )
+    with pytest.raises(Exception) as excinfo:
+        habit.full_clean()
+    assert "Habit cannot have both a reward and a related habit" in str(excinfo.value)
+
 @pytest.mark.django_db
 def test_habit_serializer_valid_data(user):
     data = {
         "place": "дома",
-        "time": "08:00",
+        "time": "08:00:00",
         "action": "сделать зарядку",
         "is_pleasant": False,
         "periodicity": 1,
         "duration": 60,
         "is_public": True
     }
-    serializer = HabitSerializer(data=data, context={'request': type('Request', (), {'user': user})()})
-    assert serializer.is_valid(), serializer.errors
+    serializer = HabitSerializer(data=data)
+    assert serializer.is_valid()
+    habit = serializer.save(user=user)
+    assert habit.place == "дома"
+    assert habit.action == "сделать зарядку"
 
 @pytest.mark.django_db
-def test_habit_serializer_invalid_duration(user):
+def test_habit_serializer_invalid_duration():
     data = {
         "place": "дома",
-        "time": "08:00",
-        "action": "тест",
-        "duration": 150
+        "time": "08:00:00",
+        "action": "сделать зарядку",
+        "is_pleasant": False,
+        "periodicity": 1,
+        "duration": 121,  # больше 120 секунд
+        "is_public": True
     }
-    serializer = HabitSerializer(data=data, context={'request': type('Request', (), {'user': user})()})
+    serializer = HabitSerializer(data=data)
     assert not serializer.is_valid()
-    assert "Время выполнения не должно превышать 120 секунд" in str(serializer.errors["non_field_errors"][0])
+    assert "duration" in serializer.errors
 
-# Тесты API
 @pytest.mark.django_db
 def test_create_habit(api_client, user):
     api_client.force_authenticate(user=user)
     data = {
         "place": "дома",
-        "time": "08:00",
+        "time": "08:00:00",
         "action": "сделать зарядку",
         "is_pleasant": False,
         "periodicity": 1,
         "duration": 60,
         "is_public": True
     }
-    response = api_client.post('/api/habits/', data, format='json')
-    if response.status_code != 201:
-        print(response.data)  # Выводим ошибки валидации
-    assert response.status_code == 201
-    assert Habit.objects.count() == 1
+    response = api_client.post(reverse('habits:habit-list'), data, format='json')
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data['place'] == "дома"
+    assert response.data['action'] == "сделать зарядку"
 
 @pytest.mark.django_db
 def test_list_public_habits(api_client, habit):
-    response = api_client.get('/api/habits/public/')
-    assert response.status_code == 200
-    assert len(response.data['results']) == 1
+    response = api_client.get(reverse('habits:public-habits'))
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 1
+    assert response.data[0]['place'] == "дома"
 
 @pytest.mark.django_db
 def test_update_habit_permission(api_client, user, habit):
-    another_user = User.objects.create_user(username='otheruser', password='otherpass')
+    another_user = User.objects.create_user(username='anotheruser', email='another@example.com', password='testpass')
     api_client.force_authenticate(user=another_user)
-    data = {"action": "обновлённое действие"}
-    response = api_client.patch(f'/api/habits/{habit.id}/', data, format='json')
-    assert response.status_code == 403  # Доступ запрещён для другого пользователя
+    response = api_client.patch(reverse('habits:habit-detail', args=[habit.id]), {'place': 'офис'}, format='json')
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 @pytest.mark.django_db
 def test_list_habits_authenticated(api_client, user, habit):
     api_client.force_authenticate(user=user)
-    response = api_client.get('/api/habits/')
-    assert response.status_code == 200
-    assert len(response.data['results']) == 1
+    response = api_client.get(reverse('habits:habit-list'))
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) == 1
+    assert response.data[0]['place'] == "дома"
+
+
+@pytest.mark.django_db
+def test_habit_model_validation_periodicity():
+    user = User.objects.create_user(username='testuser4', email='test4@example.com', password='testpass')
+    habit = Habit(
+        user=user,
+        place="дома",
+        time="08:00:00",
+        action="сделать зарядку",
+        is_pleasant=False,
+        periodicity=0,  # меньше 1
+        duration=60,
+        is_public=True
+    )
+    with pytest.raises(Exception) as excinfo:
+        habit.full_clean()
+    assert "Periodicity must be at least 1 day" in str(excinfo.value)
+
+
+@pytest.mark.django_db
+def test_habit_serializer_invalid_related_habit(user):
+    related_habit = Habit.objects.create(
+        user=user,
+        place="дома",
+        time="09:00:00",
+        action="неприятная привычка",
+        is_pleasant=False,  # должна быть приятной
+        periodicity=1,
+        duration=60,
+        is_public=True
+    )
+    data = {
+        "place": "дома",
+        "time": "08:00:00",
+        "action": "сделать зарядку",
+        "is_pleasant": False,
+        "periodicity": 1,
+        "duration": 60,
+        "is_public": True,
+        "related_habit": related_habit.id
+    }
+    serializer = HabitSerializer(data=data)
+    assert not serializer.is_valid()
+    assert "related_habit" in serializer.errors
+
+@pytest.mark.django_db
+def test_delete_habit(api_client, user, habit):
+    api_client.force_authenticate(user=user)
+    response = api_client.delete(reverse('habits:habit-detail', args=[habit.id]))
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    assert Habit.objects.count() == 0
