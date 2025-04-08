@@ -1,49 +1,41 @@
-from rest_framework import generics, permissions
-from rest_framework.pagination import PageNumberPagination
-from .models import Habit
-from .serializers import HabitSerializer
+from rest_framework import generics
+from habits.models import Habit
+from habits.serializers import HabitSerializer
+from rest_framework.permissions import IsAuthenticated
 
-
-# Настройка пагинации: 5 привычек на страницу
-class HabitPagination(PageNumberPagination):
-    page_size = 5
-
-
-# Право доступа: только владелец может изменять свои привычки
-class IsOwnerOrReadOnly(permissions.BasePermission):
-    def has_object_permission(self, request, view, obj):
-        # Разрешаем чтение всем (GET-запросы)
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        # Разрешаем запись только владельцу привычки
-        return obj.user == request.user
-
-
-# Список привычек пользователя и создание новой
-class HabitListCreateView(generics.ListCreateAPIView):
+class HabitCreateAPIView(generics.CreateAPIView):
+    queryset = Habit.objects.all()
     serializer_class = HabitSerializer
-    pagination_class = HabitPagination
-    permission_classes = [permissions.IsAuthenticated]  # Только авторизованные пользователи
-
-    def get_queryset(self):
-        # Возвращаем только привычки текущего пользователя
-        return Habit.objects.filter(user=self.request.user)
+    permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        # При создании привязываем привычку к текущему пользователю
         serializer.save(user=self.request.user)
 
-
-# Список публичных привычек
-class PublicHabitListView(generics.ListAPIView):
+class HabitListAPIView(generics.ListAPIView):
     serializer_class = HabitSerializer
-    queryset = Habit.objects.filter(is_public=True)
-    pagination_class = HabitPagination
-    permission_classes = [permissions.AllowAny]  # Доступно всем, даже неавторизованным
+    permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        return Habit.objects.filter(user=self.request.user).order_by('id')  # Добавляем сортировку
 
-# Просмотр, редактирование и удаление привычки
-class HabitDetailView(generics.RetrieveUpdateDestroyAPIView):
+class PublicHabitListAPIView(generics.ListAPIView):
     serializer_class = HabitSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Habit.objects.filter(is_public=True).order_by('id')  # Добавляем сортировку
+
+class HabitUpdateAPIView(generics.UpdateAPIView):
     queryset = Habit.objects.all()
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]  # Только владелец может изменять
+    serializer_class = HabitSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Habit.objects.filter(user=self.request.user).order_by('id')  # Добавляем сортировку
+
+class HabitDestroyAPIView(generics.DestroyAPIView):
+    queryset = Habit.objects.all()
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Habit.objects.filter(user=self.request.user).order_by('id')  # Добавляем сортировку
