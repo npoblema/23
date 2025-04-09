@@ -1,66 +1,79 @@
-import pytest
-from django.urls import reverse
-from rest_framework import status
+from django.test import TestCase
 from rest_framework.test import APIClient
-from django.contrib.auth import get_user_model
+from rest_framework import status
+from django.urls import reverse
+from users.models import CustomUser
 
-User = get_user_model()
+class UserTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user_data = {
+            'email': 'testuser@example.com',
+            'password': 'testpassword',
+            'username': 'testuser',
+            'telegram_id': '5106855055'
+        }
 
-@pytest.fixture
-def api_client():
-    return APIClient()
+    def test_register_user(self):
+        """Тест регистрации пользователя"""
+        url = reverse('register')
+        response = self.client.post(url, self.user_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('user', response.data)
+        self.assertNotIn('refresh', response.data)  # Токены не должны возвращаться
+        self.assertNotIn('access', response.data)
+        self.assertEqual(response.data['user']['email'], self.user_data['email'])
+        self.assertEqual(CustomUser.objects.count(), 1)
 
-@pytest.mark.django_db
-def test_register_user(api_client):
-    data = {
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "testpass123"
-    }
-    response = api_client.post('/api/users/register/', data, format='json')
-    assert response.status_code == 201
-    assert "access" in response.data  # Обновлено: ожидаем 'access', а не 'token'
-    assert "refresh" in response.data
-    assert "user" in response.data
-    assert response.data['user']['username'] == "testuser"
+    def test_login_user(self):
+        """Тест авторизации пользователя"""
+        # Сначала регистрируем пользователя
+        CustomUser.objects.create_user(
+            email='testuser@example.com',
+            password='testpassword',
+            username='testuser'
+        )
+        url = reverse('token_obtain_pair')
+        data = {
+            'email': 'testuser@example.com',
+            'password': 'testpassword'
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('user', response.data)
+        self.assertIn('refresh', response.data)
+        self.assertIn('access', response.data)
+        self.assertEqual(response.data['user']['email'], 'testuser@example.com')
 
-@pytest.mark.django_db
-def test_login_user(api_client):
-    user = User.objects.create_user(username="testuser", email="test@example.com", password="testpass123")
-    data = {
-        "username": "testuser",
-        "password": "testpass123"
-    }
-    response = api_client.post('/api/users/login/', data, format='json')
-    assert response.status_code == 200
-    assert "access" in response.data
-    assert "refresh" in response.data
-    assert "user" in response.data
-    assert response.data['user']['username'] == "testuser"
+    def test_login_invalid_credentials(self):
+        """Тест авторизации с неверными данными"""
+        url = reverse('token_obtain_pair')
+        data = {
+            'email': 'wronguser@example.com',
+            'password': 'wrongpassword'
+        }
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-@pytest.mark.django_db
-def test_login_invalid_credentials(api_client):
-    data = {
-        "username": "wronguser",
-        "password": "wrongpass"
-    }
-    response = api_client.post('/api/users/login/', data, format='json')
-    assert response.status_code == 401
-    assert "detail" in response.data  # Обновлено: ожидаем 'detail', а не 'error'
-    assert response.data['detail'] == "No active account found with the given credentials"
+    def test_refresh_token(self):
+        """Тест обновления токена"""
+        # Регистрируем пользователя и получаем токены
+        CustomUser.objects.create_user(
+            email='testuser@example.com',
+            password='testpassword',
+            username='testuser'
+        )
+        login_url = reverse('token_obtain_pair')
+        login_data = {
+            'email': 'testuser@example.com',
+            'password': 'testpassword'
+        }
+        login_response = self.client.post(login_url, login_data, format='json')
+        refresh_token = login_response.data['refresh']
 
-@pytest.mark.django_db
-def test_refresh_token(api_client):
-    user = User.objects.create_user(username="testuser", email="test@example.com", password="testpass123")
-    login_data = {
-        "username": "testuser",
-        "password": "testpass123"
-    }
-    login_response = api_client.post('/api/users/login/', login_data, format='json')
-    refresh_token = login_response.data['refresh']
-    data = {
-        "refresh": refresh_token
-    }
-    response = api_client.post('/api/users/token/refresh/', data, format='json')
-    assert response.status_code == 200
-    assert "access" in response.data
+        # Обновляем токен
+        url = reverse('token_refresh')
+        data = {'refresh': refresh_token}
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
