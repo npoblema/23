@@ -1,10 +1,13 @@
-from django.test import TestCase
-from rest_framework.test import APIClient
-from habits.models import Habit
-from users.models import CustomUser
 from datetime import time
 from unittest.mock import patch
+
 from django.conf import settings
+from django.test import TestCase
+from rest_framework.test import APIClient
+
+from habits.models import Habit
+from users.models import CustomUser
+
 
 class HabitTests(TestCase):
     def setUp(self):

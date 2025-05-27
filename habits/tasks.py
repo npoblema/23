@@ -1,8 +1,10 @@
+import logging
+
+import requests
 from celery import shared_task
 from django.conf import settings
-import requests
+
 from habits.models import Habit
-import logging
 
 logger = logging.getLogger(__name__)
 

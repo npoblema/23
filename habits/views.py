@@ -1,8 +1,10 @@
 # habits/views.py
 # habits/views.py
 from rest_framework import generics
+
 from .models import Habit
 from .serializers import HabitSerializer
+
 
 class HabitCreateAPIView(generics.CreateAPIView):
     queryset = Habit.objects.all()

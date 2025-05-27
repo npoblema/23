@@ -1,8 +1,11 @@
+from datetime import datetime
+
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+
 from habits.models import Habit
 from habits.tasks import send_telegram_reminder
-from datetime import datetime
+
 
 @receiver(post_save, sender=Habit)
 def schedule_habit_reminder(sender, instance, created, **kwargs):
